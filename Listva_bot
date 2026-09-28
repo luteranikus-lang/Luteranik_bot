@@ -1,0 +1,70 @@
+import time
+import requests
+
+# ================= НАСТРОЙКИ =================
+TELEGRAM_BOT_TOKEN = "ВАШ_BOT_TOKEN"  # Вставьте токен от @BotFather
+TELEGRAM_CHAT_ID = "ВАШ_CHAT_ID"      # Вставьте ваш Chat ID от @userinfobot
+
+TARGET_PRICE = 2700.0   # Порог цены в USD, при котором сработает сигнал
+CHECK_INTERVAL = 30     # Частота проверки цены (в секундах)
+# =============================================
+
+GOLD_API_URL = "https://api.gold-api.com/price/XAU"
+
+def send_telegram_message(text):
+    """Отправка сообщения в ваш Telegram"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Ошибка отправки в Telegram: {e}")
+
+def get_gold_price():
+    """Получение текущей стоимости золота за унцию"""
+    try:
+        response = requests.get(GOLD_API_URL, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return float(data.get("price"))
+    except Exception as e:
+        print(f"Ошибка запроса цены золота: {e}")
+        return None
+
+def main():
+    print("🤖 Бот запущен и отслеживает курс золота...")
+    send_telegram_message("🚀 <b>Мониторинг цены золота запущен!</b>\nЯ пришлю уведомление, как только цена достигнет целевого порога.")
+    
+    alert_triggered = False
+
+    while True:
+        price = get_gold_price()
+        
+        if price is not None:
+            print(f"Текущая цена: ${price:.2f} | Целевой порог: ${TARGET_PRICE:.2f}")
+            
+            # Если цена пробила порог и сигнал еще не отправлялся
+            if price >= TARGET_PRICE and not alert_triggered:
+                message = (
+                    f"🚨 <b>ВНИМАНИЕ! ПРОБОЙ ЦЕНЫ ЗОЛОТА!</b> 🚨\n\n"
+                    f"💰 Текущая цена: <b>${price:.2f}</b>\n"
+                    f"🎯 Ваш порог: <b>${TARGET_PRICE:.2f}</b>\n\n"
+                    f"⚡ Срочно проверьте график!"
+                )
+                send_telegram_message(message)
+                alert_triggered = True  # Защита от спама при каждом запросе
+                
+            # Если цена опустилась ниже порога, сбрасываем флаг для повторного срабатывания
+            elif price < TARGET_PRICE and alert_triggered:
+                alert_triggered = False
+                send_telegram_message(f"ℹ️ Цена опустилась ниже порога (${price:.2f}). Готов к следующему сигналу.")
+                
+        time.sleep(CHECK_INTERVAL)
+
+if __name__ == "__main__":
+    main()
